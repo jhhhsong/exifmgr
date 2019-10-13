@@ -17,12 +17,20 @@ def input_prefill(prompt, prefill=''):
 # image & exif definitions
 #
 
-import PIL.Image, PIL.ExifTags
-ExifTagValues = { v: k for k, v in PIL.ExifTags.TAGS.items() }
+USE_PILLOW = int(os.environ.get('USE_PILLOW') or '0')
+
+if USE_PILLOW:
+    import PIL.Image, PIL.ExifTags
+    ExifTagValues = { v: k for k, v in PIL.ExifTags.TAGS.items() }
+else:
+    import pyexifinfo
 EXIF_TIMESTAMP_FORMAT = '%Y:%m:%d %H:%M:%S'
 
 def get_exif_value(exif, key_name):
-    return exif.get(ExifTagValues[key_name])
+    if USE_PILLOW:
+        return exif.get(ExifTagValues[key_name]) # PIL
+    else:
+        return exif.get(key_name) # exiftool
 
 def print_exif_value(exif, key_name):
     value = get_exif_value(exif, key_name)
@@ -106,14 +114,16 @@ disp_timezone = pytz.timezone(disp_tzname)
 
 for path in paths:
     basename = os.path.basename(path)
-    dirname = os.path.dirname(path)
+    dirname = os.path.dirname(path) or "."
 
-    img = PIL.Image.open(path)
-    exif = img.getexif()
+    if USE_PILLOW:
+        img = PIL.Image.open(path)
+        exif = img.getexif() # lacks HEIF support
+    else:
+        exif = pyexifinfo.information(path)
     if not exif:
         print("File %s has no EXIF data" %path)
         continue
-    # TODO: add HEIF support
 
     #
     # get file information
@@ -123,20 +133,33 @@ for path in paths:
     if method == 'show':
         print("EXIF data for file %s:" %path)
         for key, val in exif.items():
-            if key == ExifTagValues['MakerNote']:
-                print('MakerNote: (omitted)')
-                continue
-            if key in PIL.ExifTags.TAGS:
-                print(f"\t{PIL.ExifTags.TAGS[key]}: {repr(val)}")
-            elif key in PIL.ExifTags.GPSTAGS:
-                print(f"\t{PIL.ExifTags.GPSTAGS[key]}: {repr(val)}")
+            if USE_PILLOW: # PIL
+                if key == ExifTagValues['MakerNote']:
+                    print('MakerNote: (omitted)')
+                    continue
+                if key in PIL.ExifTags.TAGS:
+                    print(f"\t{PIL.ExifTags.TAGS[key]}: {repr(val)}")
+                elif key in PIL.ExifTags.GPSTAGS:
+                    print(f"\t{PIL.ExifTags.GPSTAGS[key]}: {repr(val)}")
+            else: # exiftool
+                print(f"\t{key}: {str(val)}")
         continue
 
     print("File %s (%s):" %(basename, dirname))
-    #print_exif_value(exif, 'Make')
-    model_str = print_exif_value(exif, 'Model')
-    localtime_sec_str = print_exif_value(exif, 'DateTimeOriginal')
-    subsec_str = print_exif_value(exif, 'SubsecTimeOriginal') or '' # might not exist
+    if USE_PILLOW: # PIL
+        #print_exif_value(exif, 'Make')
+        model_str = print_exif_value(exif, 'Model')
+        localtime_sec_str = print_exif_value(exif, 'DateTimeOriginal')
+        subsec_str = print_exif_value(exif, 'SubsecTimeOriginal') or '' # might not exist
+    else:
+        model_str = print_exif_value(exif, 'EXIF:Model')
+        localtime_sec_str = print_exif_value(exif, 'EXIF:DateTimeOriginal')
+        subsec_str = print_exif_value(exif, 'EXIF:SubSecTimeOriginal') or '' # might not exist
+        # NOTE:
+        # * if subsec has leading zeroes, result is string
+        # * if subsec has no leading zeroes, result is int
+        if isinstance(subsec_str,int):
+            subsec_str = str(subsec_str)
 
     if not model_str or not localtime_sec_str:
         print('\tSkipping file due to missing metadata')
