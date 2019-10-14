@@ -74,7 +74,7 @@ def load_paths():
 
 def parse_method():
     import sys
-    if not sys.argv[1] in ['show', 'rename']:
+    if not sys.argv[1] in ['show', 'rename', 'check']:
         raise ValueError('Invalid method')
     return sys.argv[1]
 
@@ -97,24 +97,30 @@ paths = load_paths()
 
 # exif stores timestamps in local time and doesn't store timezone information
 # the original timezone needs to be supplied in order to standardize timestamps
-src_tzname = os.environ['SRC_TZ']
-if not src_tzname:
+src_tzname = os.environ.get('SRC_TZ')
+if not src_tzname and method != "check":
     raise ValueError('No timezone given')
 # also display timestamps in this timezone for convenience
-disp_tzname = os.environ.get('DISP_TZ') or 'UTC'
+disp_tzname = os.environ.get('DISP_TZ')
 
-from datetime import datetime
+from datetime import datetime, timezone
 import pytz
-timezone = pytz.timezone(src_tzname)
-disp_timezone = pytz.timezone(disp_tzname)
+src_timezone = pytz.timezone(src_tzname) if src_tzname else None
+disp_timezone = pytz.timezone(disp_tzname) if disp_tzname else timezone.utc
 
 #
 # process files
 #
 
+good_paths = []
+error_paths = []
+
 for path in paths:
     basename = os.path.basename(path)
     dirname = os.path.dirname(path) or "."
+    mainname = '.'.join(basename.split('.')[:-1])
+
+    print("File %s (%s):" %(basename, dirname))
 
     if USE_PILLOW:
         img = PIL.Image.open(path)
@@ -122,8 +128,27 @@ for path in paths:
     else:
         exif = pyexifinfo.information(path)
     if not exif:
-        print("File %s has no EXIF data" %path)
+        print("File has no EXIF data")
         continue
+
+    is_new_naming_scheme = (
+        basename.startswith("DSC")
+        and basename[3:13].isdigit()
+        and not basename[13].isdigit()
+    ) #
+
+    if is_new_naming_scheme:
+        print("\t(File has new-style name)")
+        name_dt = datetime.fromtimestamp(int(basename[3:13]), timezone.utc)
+        name_parts = mainname.split("_")
+        name_devname = name_parts[1]
+        print("\tTimestamp|UTC: %s" %(name_dt.strftime(EXIF_TIMESTAMP_FORMAT)))
+        print("\tTimestamp|DISP_TZ: %s" %(name_dt.astimezone(disp_timezone).strftime(EXIF_TIMESTAMP_FORMAT)))
+
+    if method == 'check':
+        if not is_new_naming_scheme:
+            print("\tFile skipped")
+            continue
 
     #
     # get file information
@@ -131,7 +156,6 @@ for path in paths:
     #
 
     if method == 'show':
-        print("EXIF data for file %s:" %path)
         for key, val in exif.items():
             if USE_PILLOW: # PIL
                 if key == ExifTagValues['MakerNote']:
@@ -145,7 +169,6 @@ for path in paths:
                 print(f"\t{key}: {str(val)}")
         continue
 
-    print("File %s (%s):" %(basename, dirname))
     if USE_PILLOW: # PIL
         #print_exif_value(exif, 'Make')
         model_str = print_exif_value(exif, 'Model')
@@ -174,12 +197,26 @@ for path in paths:
     else:
         print('\t<ModelAbbr>: %s' %model_abbr)
 
+    if method == 'check' and not src_timezone:
+        continue
+
     # process timestamp
     subsec_str = subsec_str[:1] # truncate to 1 digits if longer, too much precision is useless (we keep remaining digits to distinguish between images taken within the same second)
     localtime = datetime.strptime(localtime_sec_str, EXIF_TIMESTAMP_FORMAT)
-    dt = timezone.localize(localtime)
-    print('\tDateTimeOriginal_DISPTZ: %s' %dt.astimezone(disp_timezone).strftime(EXIF_TIMESTAMP_FORMAT))
+    dt = src_timezone.localize(localtime)
+    print('\tDateTimeOriginal|DISP_TZ: %s' %dt.astimezone(disp_timezone).strftime(EXIF_TIMESTAMP_FORMAT))
     utc_seconds = int(dt.timestamp())
+
+    #
+    # check name
+    #
+    if method == 'check':
+        if dt.timestamp() != name_dt.timestamp():
+            print('\t(Warning: name disagrees with EXIF - this may or may not be an error)')
+            error_paths.append(path)
+        else:
+            good_paths.append(path)
+        continue
 
     #
     # renaming
@@ -188,26 +225,36 @@ for path in paths:
     extsfx = basename.split('.')[-1]
 
     # extract "e" suffix or prefix from input name and append to output name
-    possible_suffix = False
-    if extsfx == 'jpg':
-        print('\t(Detected lower case file extension)')
-        possible_suffix = True
-    mainname = '.'.join(basename.split('.')[:-1])
-    if mainname[-1] == 'e':
-        print('\t(Detected trailing "e")')
-        possible_suffix = True
-    parts = mainname.split('_')
-    if len(parts) > 1:
-        cand = parts[1]
-        if cand[0] in 'eE' or cand[-1] in 'eE':
-            print('\t(Detected "e" near counter value)')
-            possible_suffix = True
-    if not possible_suffix:
-        modifier_suffix = ''
+
+    if is_new_naming_scheme:
+        name_suffix = name_parts[2] if len(name_parts) >= 3 else ''
+        modifier_suffix = ("_" + name_suffix) if name_suffix else ''
+        if modifier_suffix:
+            print('\t(Detected "%s" suffix in new-style name)' %modifier_suffix)
     else:
-        modifier_suffix = '_e'
-        if show_prompt:
-            modifier_suffix = input_prefill('\tModifier infix/suffix detected, please enter desired suffix: ', modifier_suffix)
+        possible_suffix = False
+        if extsfx == 'jpg':
+            print('\t(Detected lower case file extension)')
+            possible_suffix = True
+        if mainname[-1] == 'e':
+            print('\t(Detected trailing "e")')
+            possible_suffix = '_e'
+        parts = mainname.split('_')
+        if len(parts) > 1:
+            cand = parts[1]
+            if cand[0] in 'eE' or cand[-1] in 'eE':
+                print('\t(Detected "e" near counter value)')
+                possible_suffix = '_e'
+            elif cand[-1] in 'rR':
+                print('\t(Detected "r" near counter value)')
+                possible_suffix = '_r'
+
+        if not possible_suffix:
+            modifier_suffix = ''
+        else:
+            modifier_suffix = possible_suffix if isinstance(possible_suffix, str) else '_e'
+    if modifier_suffix and show_prompt:
+        modifier_suffix = input_prefill('\tModifier infix/suffix detected, please enter desired suffix: ', modifier_suffix)
 
     suggested_name = 'DSC%010i%s_%s%s.%s' %(utc_seconds, ('.' + subsec_str) if subsec_str else '', model_abbr, modifier_suffix, extsfx)
 
@@ -229,6 +276,7 @@ for path in paths:
             if show_prompt:
                 continue
             else:
+                error_paths.append(path)
                 break
 
         try:
@@ -238,5 +286,16 @@ for path in paths:
             if show_prompt:
                 continue
             else:
+                error_paths.append(path)
                 break
         break
+
+if len(error_paths):
+    print("Errors:")
+for path in error_paths:
+    print("\t%s" %path)
+
+if len(good_paths): # not always printed, currently it will simply be omitted
+    print("Successfully processed:")
+for path in good_paths:
+    print("\t%s" %path)
