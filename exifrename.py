@@ -218,7 +218,11 @@ for path in paths:
 
     # process timestamp
     subsec_str = subsec_str[:1] # truncate to 1 digits if longer, too much precision is useless (we keep remaining digits to distinguish between images taken within the same second)
-    localtime = datetime.strptime(localtime_sec_str, EXIF_TIMESTAMP_FORMAT)
+    try:
+        localtime = datetime.strptime(localtime_sec_str, EXIF_TIMESTAMP_FORMAT)
+    except:
+        # fix error where 00 seconds is printed as empty (applies to both implementations)
+        localtime = datetime.strptime(localtime_sec_str, '%Y:%m:%d %H:%M:  ')
     dt = src_timezone.localize(localtime)
     print('\tDateTimeOriginal|DISP_TZ: %s' %dt.astimezone(disp_timezone).strftime(EXIF_TIMESTAMP_FORMAT))
     utc_seconds = int(dt.timestamp())
