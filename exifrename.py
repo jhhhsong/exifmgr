@@ -133,7 +133,7 @@ for path in paths:
 
     # remove suffix, remove everything up to IMG/DSC
     mainname_part = '.'.join(basename.split('.')[:-1])
-    for MAINNAME_START_STR in ['DSC', 'IMG']:
+    for MAINNAME_START_STR in ['DSC', 'IMG', 'dsc', 'dSC']:
         start_idx = basename.find(MAINNAME_START_STR)
         if start_idx != -1:
             mainname = mainname_part[start_idx:]
@@ -199,6 +199,7 @@ for path in paths:
         # * if subsec has no leading zeroes, result is int
         if isinstance(subsec_str,int):
             subsec_str = str(subsec_str)
+    if model_str: model_str = model_str.strip()
 
     if not model_str or not localtime_sec_str:
         print('\tSkipping file due to missing metadata')
@@ -292,7 +293,9 @@ for path in paths:
         outdirname = outdir or dirname
         dstpath = os.path.join(outdirname, accepted_name)
 
-        if (os.path.exists(dstpath)):
+        if accepted_name == basename:
+            print("File already has the desired name")
+        elif (os.path.exists(dstpath)):
             print("Error: destination already exists")
             if show_prompt:
                 continue
