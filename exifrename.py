@@ -260,6 +260,9 @@ for path in paths:
         if mainname[-1] == 'e':
             print('\t(Detected trailing "e")')
             possible_suffix = '_e'
+        elif mainname[-1] == 'r':
+            print('\t(Detected trailing "r")')
+            possible_suffix = '_r'
         parts = mainname.split('_')
         if len(parts) > 1:
             cand = parts[1]
