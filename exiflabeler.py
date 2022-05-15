@@ -552,16 +552,26 @@ def get_print_file_origin_timestamp(imginfo):
     return localtime, subsec_str
 
 # get abbreviation of device name
+# None: no input
+# False: error
 def get_set_model_abbr_interactive(imginfo, *, interactive, cfgfile_device_names, device_names):
     #get_print_exif_value(imginfo, 'Make')
     model_str = get_print_exif_value(imginfo, 'Model')
     if model_str:
         model_str = model_str.strip()
         model_abbr = device_names.get(model_str)
-        if not model_abbr and interactive:
-            model_abbr = input_prefill('\t-> Enter an abbreviation for this device model (%s):\n' %model_str)
-            device_names[model_str] = model_abbr
-            save_device_names(cfgfile_device_names, device_names)
+        if not model_abbr:
+            if not interactive:
+                print('\tNo abbreviation set for device model (%s)' %model_str)
+                return False
+            while True:
+                model_abbr = input_prefill('\t-> Enter an abbreviation for this device model (%s):\n' %model_str)
+                if model_abbr:
+                    device_names[model_str] = model_abbr
+                    save_device_names(cfgfile_device_names, device_names)
+                    break
+                else:
+                    print('\tValue cannot be empty.')
         else:
             print('\t<ModelAbbr>: %s' %model_abbr)
     else:
@@ -864,6 +874,10 @@ if __name__ == "__main__":
                 interactive=interactive,
                 device_names=device_names,
             )
+            if model_abbr is False and command_verb == 'rename':
+                print('\t(Skipping file due to missing configuration)')
+                skipped_paths.append(path)
+                continue
             localtime, subsec_str = get_print_file_origin_timestamp(imginfo)
             if not localtime:
                 print('\t(Skipping file due to missing metadata)')
@@ -935,10 +949,10 @@ if __name__ == "__main__":
             elif modifier and interactive > 1:
                 modifier = input_prefill('\t-> Modifier detected, please confirm (clear to remove): ', modifier)
             modifier_suffix = '_' + modifier if modifier else ''
-            suggested_name = 'DSC%010i%s_%s%s.%s' %(
+            suggested_name = 'DSC%010i%s%s%s.%s' %(
                 int(dt.timestamp()), # seconds under UTC
                 ('.' + subsec_str) if subsec_str else '',
-                model_abbr,
+                ('_' + model_abbr) if model_abbr else '',
                 modifier_suffix,
                 ext
             )
