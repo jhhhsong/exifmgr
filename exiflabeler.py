@@ -506,7 +506,7 @@ def parse_filename(filename):
     return prefix, nameinfo, modifier, ext
 
 #
-# operations
+# interactive operations
 #
 
 def print_parse_filename(filename, *, disp_tz=None):
@@ -598,15 +598,17 @@ def print_exif(imginfo):
 
 # None for "unspecified", False for error
 def interpret_localtime_interactive(
-    localtime, override_tz, device_id, require_unique,
-    *, interactive, print_all, device_tzmap, cand_callback
+    localtime,
+    *, interactive,
+    device_tzmap, override_tz, device_id,
+    print_all, require_unique, cand_callback,
 ):
     def print_tz_candidates(tz_candidates, cand_callback, *, heading, indent_level=1):
         indent = '\t' * indent_level
         if tz_candidates is None:
             return
         if len(tz_candidates) > 1:
-            print('\t' * indent_level + heading + ' - multiple candidates:')
+            print('\t' * indent_level + heading + ': (ambiguous)')
             indent_level += 1
         for (device_tz, is_dst, dt) in tz_candidates:
             is_dst_str = '' if is_dst is None else ' (DST=%s)' %is_dst
@@ -625,10 +627,12 @@ def interpret_localtime_interactive(
     cfgfile_tz_candidates = device_tzinfo_interpret_localtime(device_tzmap, device_id, localtime)\
         if device_id else None
     tz_candidates = override_tz_candidates or cfgfile_tz_candidates
-    print_tz_candidates(tz_candidates, cand_callback, heading='LocaltimeInterpretation:Timezone')
+    print_tz_candidates(tz_candidates, cand_callback,
+        heading='LocaltimeInterpretation:Timezone')
     if override_tz and cfgfile_tz_candidates:
         if print_all:
-            print_tz_candidates(cfgfile_tz_candidates, cand_callback, heading='LocaltimeInterpretation:Timezone (config file)')
+            print_tz_candidates(cfgfile_tz_candidates, cand_callback,
+                heading='LocaltimeInterpretation:Timezone (config file)')
         if not functools.reduce(
             lambda acc, x: (acc or x[0] == override_tz),
             cfgfile_tz_candidates,
@@ -638,16 +642,16 @@ def interpret_localtime_interactive(
 
     if not tz_candidates: # implies not override_tz
         if not device_id in device_tzmap:
-            print('\t(Warning: no timezones configured for device)')
+            print('\tLocaltimeInterpretation:Timezone: (none)\n'
+                '\t\t(Warning: device has no configured timezones)')
             return None
         else:
-            print('\t(Warning: timestamp is not within configured range)')
+            print('\tLocaltimeInterpretation:Timezone: (none)\n'
+                '\t\t(Warning: timestamp is not within configured range)')
             return None
     if len(tz_candidates) == 1:
         return tz_candidates[0]
     else:
-        print('\t\t(%s: stored localtime timestamp is ambiguous)'
-            %('Error' if require_unique else 'Warning'))
         if require_unique and interactive:
             while True:
                 answer = input_prefill('\t\t-> Select timezone by entering 1-based numerical index:\n\t\t   ', '')
@@ -661,8 +665,10 @@ def interpret_localtime_interactive(
                 if interactive > 1:
                     print('\t\t(Selected: %s)' %result[0].zone)
                 return result
-        else:
+        elif require_unique:
             return False
+        else:
+            return None
 
 def interactive_file_rename(suggested_name, outdirname, *, interactive):
     import shutil
@@ -703,20 +709,13 @@ def interactive_file_rename(suggested_name, outdirname, *, interactive):
 # command-line parsing & environment setup
 #
 
-COMMAND_KEYWORDS = ['show_exif', 'rename', 'check']
-
 #def main():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description=_DESCRIPTION,
-        epilog='Supported timezone strings: (1) a tzdb-compatible format (e.g. "Pacific/Pitcairn"), (2) ISO-8601 offset format prefixed by "UTC" (e.g. "UTC+0800"), or (3) "UTC"',
-    )
-    parser.add_argument(
-        'command_verb',
-        action='store',
-        choices=COMMAND_KEYWORDS,
-        metavar='COMMAND',
-        help='( %s )' %(' | '.join(COMMAND_KEYWORDS)),
+        epilog='Supported timezone strings:\n(1) tzdb format (e.g. "Pacific/Pitcairn")\n(2) "UTC" suffixed with ISO-8601 offset (e.g. "UTC+0800")\n(3) "UTC"',
+        #'Name formats' # TODO explain name formats
+        #formatter_class=argparse.RawDescriptionHelpFormatter # TODO: wrap fix for header (should preserve double-newlines)
     )
     parser.add_argument(
         'paths',
@@ -726,12 +725,12 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         '-v', '--verbose',
-        action='store_true', default=False,
+        action='store_true',
         help='print more internal state & debug information.',
     )
     parser.add_argument(
         '-n', '--dry-run',
-        action='store_true', default=False,
+        action='store_true',
         help='when running a file-processing command, this will prevent any filesystem changes from being applied.',
     )
     parser.add_argument(
@@ -741,9 +740,35 @@ if __name__ == "__main__":
         metavar='PROMPT_LEVEL',
         help='use interactive prompts to confirm actions. The following levels are supported:\n0 - non-interactive; 1 - prompt on warnings and (non-fatal) errors only; 2 - prompt on all actions (default is 0).',
     )
-    # TODO
-    #actions_group = parser.add_argument_group('verbs')
-    #actions_group.add_argument(
+    actions_group = parser.add_argument_group('verbs')
+    actions_group.add_argument(
+        '--show', '-S',
+        action='store_true',
+        help='Display extended file information'
+    )
+    actions_group.add_argument(
+        '--check', '-X',
+        action='store_true',
+        help='Check for name/metadata inconsistencies. If check fails, further actions will be cancelled.'
+        #action='store', nargs='?',
+        #type=float, const='10',
+        #metavar='PRECISION',
+        #...'optionally specifying a precision value (measured in seconds)'
+    )
+    mutator_actions_group = actions_group.add_mutually_exclusive_group()
+    mutator_actions_group.add_argument(
+        '--rename', '-N',
+        action='store_true',
+        help='Rename file'
+        #action='store', nargs='?', const='std',
+        #metavar='FMT_NAME|FMT_PATTERN',
+        #help='Rename file using the specified name pattern (by name or by pattern string)'
+    )
+    #mutator_actions_group.add_argument(
+    #    '--retag', '-T'
+    #    action='store', nargs='?', const='localtime,timezone',
+    #    metavar='ATTRIB_LIST',
+    #    help='Set metadata attributes (specified as comma-separated list) based on filename'
     #)
     data_params_group = parser.add_argument_group('data parameters')
     data_params_group.add_argument(
@@ -753,7 +778,7 @@ if __name__ == "__main__":
         help='path to directory in which config files are located. If omitted, user\'s home directory will be used.',
     )
     data_params_group.add_argument(
-        '-s', '--src-tz',
+        '--src-tz', '-s',
         action='store',
         metavar='TIMEZONE',
         help='specify the timezone for interpreting stored timestamps, overriding device preset values (required when performing rename; optional otherwise).',
@@ -764,17 +789,12 @@ if __name__ == "__main__":
         metavar='TIMEZONE',
         help='specify an alternative timezone for displaying timestamps (optional).',
     )
-    rename_options_group = parser.add_argument_group('verb=rename options')
-    rename_options_group.add_argument(
-        '-f', '--force', '--override-inname',
-        action='store_true', default=False,
-        help='if a conflict exists between timestamp information in structured filename and exif metadata (interpreted in the specified timzeone), use the latter and do not generate an error.',
-    )
+    rename_options_group = parser.add_argument_group('file rename options')
     rename_options_group.add_argument(
         '-o', '--outdir',
         action='store',
         metavar='OUT_DIR',
-        help='move renamed files to this directory; can be helpful for avoiding intermediate name conflicts during renaming.',
+        help='move renamed files to this directory (can help avoid name conflicts during renaming).',
     )
 
     #
@@ -782,11 +802,6 @@ if __name__ == "__main__":
     #
 
     args = parser.parse_args()
-
-    command_verb = args.command_verb
-    paths = args.paths
-
-    # TODO: consider controlling all "[]" prints via args.verbose
 
     dry_run = args.dry_run or bool(os.environ.get('DRY_RUN') or 0) # off by default
     if args.verbose: print("[Dry run: %s]" %dry_run)
@@ -797,12 +812,14 @@ if __name__ == "__main__":
     ) # on by default
     if args.verbose: print("[Interactive: %s]" %interactive)
 
-    override_inname = args.force or int(os.environ.get('FORCE') or '0')
-    if command_verb == 'rename':
-        if args.verbose: print("[Force rename: %s]" %override_inname)
+    paths = args.paths
+    do_show_all = args.show
+    do_check = args.check
+    do_rename = args.rename
+    #do_retag = args.retag
 
     outdir = args.outdir or os.environ.get('OUTPUT_DIR')
-    if command_verb == 'rename' and outdir and not os.path.isdir(outdir):
+    if do_rename and outdir and not os.path.isdir(outdir):
         if os.path.exists(outdir):
             raise Exception('The specified output dir cannot be created because a file of the same name exists.')
         os.mkdir(outdir)
@@ -858,15 +875,15 @@ if __name__ == "__main__":
             print('\t' + imginfo.msg())
             skipped_paths.append(path)
             continue
+
+        prefix, nameinfo, modifier, ext, name_dt = print_parse_filename(basename, disp_tz=disp_tz)
+
         with imginfo:
             print("\tDimensions: %s" %str(imginfo.dimensions()))
             # TODO (later): also print file format, color & pixel format?
 
-            prefix, nameinfo, modifier, ext, name_dt = print_parse_filename(basename, disp_tz=disp_tz)
-
-            if command_verb == 'show_exif':
+            if do_show_all:
                 print_exif(imginfo)
-                continue
 
             model_abbr = get_set_model_abbr_interactive(
                 imginfo,
@@ -874,10 +891,6 @@ if __name__ == "__main__":
                 interactive=interactive,
                 device_names=device_names,
             )
-            if model_abbr is False and command_verb == 'rename':
-                print('\t(Skipping file due to missing configuration)')
-                skipped_paths.append(path)
-                continue
             localtime, subsec_str = get_print_file_origin_timestamp(imginfo)
             if not localtime:
                 print('\t(Skipping file due to missing metadata)')
@@ -887,6 +900,11 @@ if __name__ == "__main__":
         #
         # timezone processing
         #
+        if name_dt:
+            print('\tLocalTimeInterpretation:FilenameTimeOffset: %s' %(
+                (name_dt.replace(tzinfo=None) - localtime)
+            ))
+
         def tz_cand_callback(device_tz, is_dst, dt, *, indent_level):
             #nonlocal name_dt
             #nonlocal disp_tz
@@ -898,52 +916,53 @@ if __name__ == "__main__":
                     heading='Filename:Timestamp|PRESET: ', indent_level=indent_level+1)
         tz_candidate = interpret_localtime_interactive(
             localtime,
-            src_tz, model_abbr,
-            require_unique=(command_verb == 'rename'),
             interactive=interactive,
-            print_all=(command_verb == 'check'),
             device_tzmap=device_tzmap,
+            override_tz=src_tz,
+            device_id=model_abbr,
+            print_all=do_check,
+            require_unique=(do_check or do_rename),
             cand_callback=tz_cand_callback,
         )
         if tz_candidate is None:
+            print('\t(Skipping file)')
             skipped_paths.append(path)
             continue
         elif tz_candidate is False:
-            if command_verb == 'rename':
-                print('\t(Error: unable to determine timezone - cannot proceed with rename)')
+            print('\t(Error: unable to determine timezone - cannot proceed)')
             error_paths.append(path)
             continue
-        _, _, dt = tz_candidate
+        else:
+            _, _, dt = tz_candidate
+
+        name_exif_mismatch = False
+        if name_dt and (dt.timestamp() != name_dt.timestamp()):
+            # TODO: ignore dropped precision?
+            # TODO: if diverging by >= 30 minutes. mark as possible timezone error; otherwise treat as minor offset warning?
+            print('\t(Warning: timestamp in filename disagrees with EXIF (given the specified timezone) - this may be caused by a timezone config error or incorrect values in the EXIF metadata')
+            name_exif_mismatch = True
 
         #
-        # main action
+        # main actions
         #
         error = False
 
-        name_exif_mismatch = None
-        if isinstance(nameinfo, StructuredImageNameInfo):
-            name_exif_mismatch = False
-            if dt.timestamp() != name_dt.timestamp():
-                # TODO: ignore dropped precision?
-                # TODO: if diverging by >= 30 minutes. mark as possible timezone error; otherwise treat as minor offset warning?
-                print('\t(Warning: timestamp in filename disagrees with EXIF (given the specified timezone) - this may be caused by a timezone config error or incorrect values in the EXIF metadata')
-                name_exif_mismatch = True
-
-        if command_verb == 'check':
-            if not isinstance(nameinfo, StructuredImageNameInfo):
+        if do_check:
+            if not name_dt:
                 print("\t(File skipped)")
                 skipped_paths.append(path)
                 continue
             if name_exif_mismatch:
-                error = True # TODO: use warning instead?
-
-        # TODO: prefix isn't currently included (ambiguity vs. modifier)
-        elif command_verb == 'rename':
-            if name_exif_mismatch and not interactive and not override_inname:
+                print('\t(Check failed.)')
                 error_paths.append(path)
-                print('\t(Aborting. Use --override-inname to ignore this error, or use interactive mode.)')
                 continue
 
+        # TODO: prefix isn't currently included (ambiguity vs. modifier)
+        if do_rename:
+            if model_abbr is False and do_rename: # TODO: remove after updating modifier format
+                print('\t(Skipping file due to missing configuration)')
+                skipped_paths.append(path)
+                continue
             if modifier is True and interactive:
                 modifier = input_prefill('\t-> Modification detected, please enter a modifier abbreviation (clear to remove): ', '')
             elif modifier and interactive > 1:
@@ -965,6 +984,8 @@ if __name__ == "__main__":
             outdirname = outdir or dirname
             error = not interactive_file_rename(suggested_name, outdirname, interactive=interactive)
 
+        #elif do_retag:
+
         (error_paths if error else good_paths).append(path)
 
     print("")
@@ -974,7 +995,7 @@ if __name__ == "__main__":
         for path in error_paths:
             print("\t%s" %path)
 
-    if (command_verb == 'rename'
+    if ((do_rename )# or do_retag)
         and len(good_paths)):
         print("Successfully processed:")
         for path in good_paths:
