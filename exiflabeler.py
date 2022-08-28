@@ -842,7 +842,7 @@ if __name__ == "__main__":
         print('[Config file (device_names): %s]' %cfgfile_device_names)
         for item in device_names.items():
             print('\t' + str(item))
-        print('[Config file (device_names): %s]' %cfgfile_device_tzinfo)
+        print('[Config file (device_tzinfo): %s]' %cfgfile_device_tzinfo)
         for item in device_tzmap.items():
             print('\t' + str(item))
 
