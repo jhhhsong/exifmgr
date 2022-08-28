@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+_PROGRAM_NAME = 'exiflabeler'
 _DESCRIPTION = '\
 An EXIF metadata manager that supports better handling for timestamp, timezone, device, author metadata.\n\
 This program can be used to perform the following tasks:\n\
@@ -9,8 +10,8 @@ This program can be used to perform the following tasks:\n\
 
 # Notes
 # * exif is the main supported format, thanks to the ubiquity of the
-#   DateTimeOriginal field (which is intended to be reflect the time of the
-#   original act of recording)
+#   DateTimeOriginal field (which is intended to record the original time of
+#   recording)
 # * this is less feasible for other formats, which may not have a distinct
 #   "creation time" timestamp used specifically for this purpose
 #   (e.g. isom's "encoded time")
@@ -442,7 +443,7 @@ class StructuredImageNameInfo(
     )
 ):
     def formatDescription(self):
-        return "exiflabeler"
+        return _PROGRAM_NAME
 
     """
     if (
@@ -826,9 +827,9 @@ if __name__ == "__main__":
         if args.verbose: print('[Created output directory: %s]' %outdir)
 
     # load config files
-    #cfgfile = cfgpath or os.path.join(os.environ['HOME'], '.exiflabeler')
-    cfgfile_device_names = os.path.join(args.cfgdir or os.environ['HOME'], '.exiflabeler_devinfo')
-    cfgfile_device_tzinfo = os.path.join(args.cfgdir or os.environ['HOME'], '.exiflabeler_tzinfo')
+    #cfgfile = cfgpath or os.path.join(os.environ['HOME'], '.%s'%_PROGRAM_NAME)
+    cfgfile_device_names = os.path.join(args.cfgdir or os.environ['HOME'], '.%s_devinfo'%_PROGRAM_NAME)
+    cfgfile_device_tzinfo = os.path.join(args.cfgdir or os.environ['HOME'], '.%s_tzinfo'%_PROGRAM_NAME)
     device_names = load_device_names(cfgfile_device_names)
     device_tzmap = load_device_tzinfo(cfgfile_device_tzinfo)
     if args.verbose:
