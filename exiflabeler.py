@@ -325,7 +325,10 @@ def save_device_names(path, name_map):
 
 # representing a historical timezone config
 DEVICE_TZINFO_FIELDS = ['tz', 'start', 'end']
-DeviceTzCfgEntry = namedtuple('DeviceTzCfgEntry', DEVICE_TZINFO_FIELDS)
+class DeviceTzCfgEntry(namedtuple('DeviceTzCfgEntry', DEVICE_TZINFO_FIELDS)):
+    __slots__ = ()
+    def __str__(self):
+        return '%s (%s, %s)' %(self.tz, self.start, self.end or '-')
 
 # csv format - rows:
 # device_id, tzname, start time, end time (both in UTC, specified in ISO format with dashes)
@@ -341,12 +344,12 @@ def load_device_tzinfo(path):
         reader = CsvReader(file)
         def parse_time(ds):
             if not ds: return None
-            y, m, d, h, m, *_ = ds.split('-')
-            return datetime(y, m, d, h, m)
+            yr, mon, day, hr, min, *_ = [int(v) for v in ds.split('-')]
+            return datetime(yr, mon, day, hr, min, tzinfo=get_timezone('UTC'))
         for device_id, tzname, start, end, *_ in reader:
             tz = get_timezone(tzname)
             tz_item = DeviceTzCfgEntry(tz, parse_time(start), parse_time(end))
-            device_tzmap.get(device_id, []).append(tz_item)
+            device_tzmap.setdefault(device_id, []).append(tz_item)
     for device_id, tz_list in device_tzmap.items():
         tz_list.sort(key=lambda tz_item: tz_item.start.timestamp())
         for index in range(1, len(tz_list)):
@@ -384,7 +387,7 @@ def device_tzinfo_interpret_localtime(device_tzmap, device_id, localtime):
         #nonlocal results
         (tz, start, end) = tz_info
         t = tz.localize(localtime, is_dst=is_dst)
-        if t >= start and t < end:
+        if t >= start and (t < end if end else True):
             results.append((t.tzinfo, is_dst, t))
             return True
         return False
