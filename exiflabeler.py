@@ -843,11 +843,13 @@ if __name__ == "__main__":
     device_tzmap = load_device_tzinfo(cfgfile_device_tzinfo)
     if args.verbose:
         print('[Config file (device_names): %s]' %cfgfile_device_names)
-        for item in device_names.items():
-            print('\t' + str(item))
+        for key, item in device_names.items():
+            print('\t%s:\t%s' %(key, item))
         print('[Config file (device_tzinfo): %s]' %cfgfile_device_tzinfo)
-        for item in device_tzmap.items():
-            print('\t' + str(item))
+        for key, items in device_tzmap.items():
+            print('\t%s:' %key)
+            for item in items:
+                print('\t\t%s' %str(item))
 
     # exif stores timestamps in local time and doesn't store timezone information
     # the original timezone needs to be supplied in order to standardize timestamps
@@ -872,7 +874,7 @@ if __name__ == "__main__":
         basename = os.path.basename(path)
         dirname = os.path.dirname(path) or "."
         print("File %s (%s):" %(basename, dirname))
-        if not os.path.exists(path):
+        if not os.path.isfile(path):
             print("\t(Error: Nonexistent file)")
             error_paths.append(path)
             continue
@@ -1005,7 +1007,7 @@ if __name__ == "__main__":
         for path in error_paths:
             print("\t%s" %path)
 
-    if ((do_rename )# or do_retag)
+    if ((do_check or do_rename)# or do_retag)
         and len(good_paths)):
         print("Successfully processed:")
         for path in good_paths:
