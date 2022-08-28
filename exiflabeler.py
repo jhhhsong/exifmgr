@@ -622,10 +622,15 @@ def interpret_localtime_interactive(
             indent_level += 1
         for (device_tz, is_dst, dt) in tz_candidates:
             is_dst_str = '' if is_dst is None else ' (DST=%s)' %is_dst
+            zone_expr = device_tz.zone + is_dst_str
+            zone_name = device_tz.tzname(dt)
             print('\t' * indent_level
                 + ((heading + ': ') if len(tz_candidates) == 1 else '')
                 # print full name + abbreviated name
-                + '%s (%s)' %(device_tz.zone + is_dst_str, device_tz.tzname(dt)))
+                + ('%s (%s)' %(zone_expr, zone_name) if zone_name
+                    else zone_expr
+                )
+            )
             print_timestamp_explicit(dt, device_tz, is_dst,
                 heading='DateTimeOriginal|PRESET: ', indent_level=indent_level+1)
             #print('\t' * (indent_level + 1)
@@ -951,7 +956,7 @@ if __name__ == "__main__":
         if name_dt and (dt.timestamp() != name_dt.timestamp()):
             # TODO: ignore dropped precision?
             # TODO: if diverging by >= 30 minutes. mark as possible timezone error; otherwise treat as minor offset warning?
-            print('\t(Warning: timestamp in filename disagrees with EXIF (given the specified timezone) - this may be caused by a timezone config error or incorrect values in the EXIF metadata')
+            print('\t(Warning: timestamp discrepancy detected between filename and EXIF in the specified timezone)')
             name_exif_mismatch = True
 
         #
