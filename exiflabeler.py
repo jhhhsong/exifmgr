@@ -302,6 +302,9 @@ def ImageInfo(path, require_write=False):
 # source device management
 #
 
+# csv format - rows:
+# device_make, device_model, device_id
+# returns: map from (device_make, device_model) to device_id
 def load_device_names(path):
     name_map = {}
     if not os.path.isfile(path):
@@ -309,15 +312,15 @@ def load_device_names(path):
     with open(path, mode='r') as file:
         for line in file:
             if not line or line[0] == '#': continue
-            pair = line.split(',')
-            name_map[pair[0].strip()] = pair[1].strip()
+            columns = [val.strip() for val in line.split(',')]
+            name_map[(columns[0], columns[1])] = columns[2]
     return name_map
 
 def save_device_names(path, name_map):
     print('[Begin updating device name map]')
     with open(path, mode='w') as file:
-        for key, val in name_map.items():
-            file.write(key + ',' + val + '\n')
+        for (device_make, device_model), device_id in name_map.items():
+            file.write(device_make + ',' + device_model + ',' + device_id + '\n')
     print('[Successfully updated device name map]')
 
 # representing a historical timezone config
@@ -557,11 +560,13 @@ def get_print_file_origin_timestamp(imginfo):
 # None: no input
 # False: error
 def get_set_device_id_interactive(imginfo, *, interactive, cfgfile_device_names, device_names):
-    #get_print_exif_value(imginfo, 'Make')
+    make_str = get_print_exif_value(imginfo, 'Make')
     model_str = get_print_exif_value(imginfo, 'Model')
     if model_str:
         model_str = model_str.strip()
-        device_id = device_names.get(model_str)
+        device_id = device_names.get((make_str or '', model_str))
+        if not device_id:
+            device_id = device_names.get(('', model_str))
         if not device_id:
             if not interactive:
                 print('\tNo abbreviation set for device model (%s)' %model_str)
@@ -569,7 +574,7 @@ def get_set_device_id_interactive(imginfo, *, interactive, cfgfile_device_names,
             while True:
                 device_id = input_prefill('\t-> Enter an abbreviation for this device model (%s):\n' %model_str)
                 if device_id:
-                    device_names[model_str] = device_id
+                    device_names[(make_str or '', model_str)] = device_id
                     save_device_names(cfgfile_device_names, device_names)
                     break
                 else:
