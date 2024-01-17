@@ -1007,7 +1007,7 @@ if __name__ == "__main__":
                 error_paths.append(path)
                 continue
             elif os.path.isdir(path):
-                process_paths(os.listdir(path))
+                process_paths([os.path.join(path, child) for child in os.listdir(path)])
             else:
                 process_file(path)
 
