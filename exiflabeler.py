@@ -406,7 +406,13 @@ def device_tzinfo_interpret_localtime(device_tzmap, device_id, localtime):
 # format:
 # * mainname == (DSC|IMG|dsc|dSC)[_][<modified_flag>]<serial>[<modified_flag>]
 # * followed by modifier suffix: [_<modifier>]
-SERIAL_IMGNAME_CHECK = re.compile('(?P<mainname_prefix>([Dd][Ss][Cc]|[Ii][Mm][Gg]))_?(?P<modified_flag_pre>[E])?(?P<serial>[0-9]{1,5})(?P<modified_flag_post>[E])?(_(?P<modifier>[a-z0-9\(\)\[\],-]+))?')
+SERIAL_IMGNAME_CHECK = re.compile(
+    '(?P<mainname_prefix>([Dd][Ss][Cc]|[Ii][Mm][Gg]))_?'
+    '(?P<modified_flag_pre>[E])?'
+    '(?P<serial>[0-9]{1,5})'
+    '(?P<modified_flag_post>[E])?'
+    '(_(?P<modifier>[a-z0-9\(\)\[\],-]+))?'
+)
 #SerialImageNameInfo = namedtuple('SerialImageNameInfo', 'prefix', 'serial', 'modified')
 class SerialImageNameInfo(
     namedtuple(
@@ -437,7 +443,11 @@ class SerialImageNameInfo(
 # * mainname == DSC<timestamp>['<precision>][_<device_id>]
 # * followed by modifier suffix: [_<modifier>]
 # TODO: in newstyle filename, what if device is omitted?? modifier?? - currently distinguished by always having model name be uppercase and modifier be lowercase, but this is ambiguous on Windows and NTFS
-STRUCTURED_IMGNAME_CHECK = re.compile('DSC(?P<timestamp>[0-9]{10})(_(?P<device_id>[A-Z][A-Z0-9]*))?(_(?P<modifier>[a-z0-9\(\)\[\],-]+))?')
+STRUCTURED_IMGNAME_CHECK = re.compile(
+    'DSC(?P<timestamp>[0-9]{10})'
+    '(_(?P<device_id>[A-Z][A-Z0-9]*))?'
+    '(_(?P<modifier>[a-z0-9\(\)\[\],-]+))?'
+)
 #StructuredImageNameInfo = namedtuple('StructuredImageNameInfo', 'timestamp', 'timestamp_precision', 'device_id')
 class StructuredImageNameInfo(
     namedtuple(
@@ -452,18 +462,6 @@ class StructuredImageNameInfo(
     def formatDescription(self):
         return _PROGRAM_NAME
 
-    """
-    if (
-        len(mainname) >= 13
-        and mainname.startswith("DSC")
-        and mainname[3:13].isdigit()
-        and (len(mainname) == 13 or not mainname[13].isdigit())
-    ):
-        name_parts = mainname.split("_")
-        timestamp = int(basename[3:13]) # should be same as name_parts[0] with "DSC" prefix stripped
-        device_id = name_parts[1]
-        modifier = name_parts[2] if len(name_parts) >= 3 else ''
-    """
     def from_parse(regex):
         return StructuredImageNameInfo(
             timestamp=int(regex.group('timestamp')),
@@ -545,16 +543,16 @@ def print_parse_filename(filename, *, disp_tz=None):
         dt = None
     return prefix, nameinfo, modifier, ext, dt
 
-def get_print_exif_value(imginfo, key):
-    value = imginfo.get_exif_value(key)
+def get_and_print_tag(imginfo, key):
+    value = imginfo.get_tag(key)
     print('\t' + key + ': ' + str(value))
     return value
 
 def get_print_file_origin_timestamp(imginfo):
-    localtime_str = get_print_exif_value(imginfo, 'DateTimeOriginal')
+    localtime_str = get_and_print_tag(imginfo, 'EXIF:DateTimeOriginal')
     if not localtime_str:
         return None, None
-    subsec_str = get_print_exif_value(imginfo, 'SubsecTimeOriginal') or '' # might not exist
+    subsec_str = get_and_print_tag(imginfo, 'EXIF:SubsecTimeOriginal') or '' # might not exist
     subsec_str = subsec_str[:1] # truncate to 1 digit if longer, too much precision is useless (we keep remaining digits to distinguish between images taken within the same second)
     localtime = parse_timestamp(localtime_str)
     return localtime, subsec_str
@@ -563,8 +561,8 @@ def get_print_file_origin_timestamp(imginfo):
 # None: no input
 # False: error
 def get_set_device_id_interactive(imginfo, *, interactive, cfgfile_device_names, device_names):
-    make_str = get_print_exif_value(imginfo, 'Make')
-    model_str = get_print_exif_value(imginfo, 'Model')
+    make_str = get_and_print_tag(imginfo, 'EXIF:Make')
+    model_str = get_and_print_tag(imginfo, 'EXIF:Model')
     if model_str:
         model_str = model_str.strip()
         device_id = device_names.get((make_str or '', model_str))
@@ -620,10 +618,10 @@ def interpret_localtime_interactive(
         if len(tz_candidates) > 1:
             print('\t' * indent_level + heading + ': (ambiguous)')
             indent_level += 1
-        for (device_tz, is_dst, dt) in tz_candidates:
+        for (tz, is_dst, dt) in tz_candidates:
             is_dst_str = '' if is_dst is None else ' (DST=%s)' %is_dst
-            zone_expr = device_tz.zone + is_dst_str
-            zone_name = device_tz.tzname(dt)
+            zone_expr = tz.zone + is_dst_str
+            zone_name = tz.tzname(dt)
             print('\t' * indent_level
                 + ((heading + ': ') if len(tz_candidates) == 1 else '')
                 # print full name + abbreviated name
@@ -631,11 +629,11 @@ def interpret_localtime_interactive(
                     else zone_expr
                 )
             )
-            print_timestamp_explicit(dt, device_tz, is_dst,
+            print_timestamp_explicit(dt, tz, is_dst,
                 heading='DateTimeOriginal|PRESET: ', indent_level=indent_level+1)
             #print('\t' * (indent_level + 1)
             #    + 'DateTimeOriginal|PRESET: %s' %dt.strftime(EXIF_TIMESTAMP_FORMAT) + is_dst_str)
-            cand_callback(device_tz, is_dst, dt, indent_level=indent_level)
+            cand_callback(tz, is_dst, dt, indent_level=indent_level)
 
     override_tz_candidates = tz_interpret_localtime(override_tz, localtime)\
         if override_tz else None
@@ -870,19 +868,20 @@ if __name__ == "__main__":
     # process files
     #
 
-    print("")
     good_paths = []
     error_paths = []
     skipped_paths = []
 
-    for path in paths:
+    def process_file(path):
+        #nonlocal good_paths
+        #nonlocal error_paths
+        #nonlocal skipped_paths
+        # accesses: disp_tz, src_tz
+        # accesses: interactive, do_check, ... # various actions and parameters
+
         basename = os.path.basename(path)
         dirname = os.path.dirname(path) or "."
         print("File %s (%s):" %(basename, dirname))
-        if not os.path.isfile(path):
-            print("\t(Error: Nonexistent file)")
-            error_paths.append(path)
-            continue
 
         #
         # get file information
@@ -891,7 +890,7 @@ if __name__ == "__main__":
         if isinstance(imginfo, ImageInfo_unsupported):
             print('\t' + imginfo.msg())
             skipped_paths.append(path)
-            continue
+            return
 
         prefix, nameinfo, modifier, ext, name_dt = print_parse_filename(basename, disp_tz=disp_tz)
 
@@ -912,7 +911,7 @@ if __name__ == "__main__":
             if not localtime:
                 print('\t(Skipping file due to missing metadata)')
                 skipped_paths.append(path)
-                continue
+                return
 
         #
         # timezone processing
@@ -922,14 +921,14 @@ if __name__ == "__main__":
                 (name_dt.replace(tzinfo=None) - localtime)
             ))
 
-        def tz_cand_callback(device_tz, is_dst, dt, *, indent_level):
+        def tz_cand_callback(tz, is_dst, dt, *, indent_level):
             #nonlocal name_dt
             #nonlocal disp_tz
             if disp_tz:
                 print_timestamp_in(dt, disp_tz,
                     heading='DateTimeOriginal|DISP: ', indent_level=indent_level+1)
             if name_dt:
-                print_timestamp_in(name_dt, device_tz,
+                print_timestamp_in(name_dt, tz,
                     heading='Filename:Timestamp|PRESET: ', indent_level=indent_level+1)
         tz_candidate = interpret_localtime_interactive(
             localtime,
@@ -944,11 +943,11 @@ if __name__ == "__main__":
         if tz_candidate is None:
             print('\t(Skipping file)')
             skipped_paths.append(path)
-            continue
+            return
         elif tz_candidate is False:
             print('\t(Error: unable to determine timezone - cannot proceed)')
             error_paths.append(path)
-            continue
+            return
         else:
             _, _, dt = tz_candidate
 
@@ -968,18 +967,18 @@ if __name__ == "__main__":
             if not name_dt:
                 print("\t(File skipped)")
                 skipped_paths.append(path)
-                continue
+                return
             if name_exif_mismatch:
                 print('\t(Check failed.)')
                 error_paths.append(path)
-                continue
+                return
 
         # TODO: prefix isn't currently included (ambiguity vs. modifier)
         if do_rename:
             if device_id is False and do_rename: # TODO: remove after updating modifier format
                 print('\t(Skipping file due to missing configuration)')
                 skipped_paths.append(path)
-                continue
+                return
             if modifier is True and interactive:
                 modifier = input_prefill('\t-> Modification detected, please enter a modifier abbreviation (clear to remove): ', '')
             elif modifier and interactive > 1:
@@ -996,7 +995,7 @@ if __name__ == "__main__":
 
             if dry_run:
                 good_paths.append(path)
-                continue
+                return
 
             outdirname = outdir or dirname
             error = not interactive_file_rename(suggested_name, outdirname, interactive=interactive)
@@ -1005,20 +1004,33 @@ if __name__ == "__main__":
 
         (error_paths if error else good_paths).append(path)
 
+    def process_paths(paths):
+        for path in paths:
+            if not os.path.exists(path):
+                print(f"Error: Nonexistent path {path}")
+                error_paths.append(path)
+                continue
+            elif os.path.isdir(path):
+                process_paths(os.listdir(path))
+            else:
+                process_file(path)
+
+    print("")
+    process_paths(paths)
     print("")
 
     if len(error_paths):
         print("Errors:")
         for path in error_paths:
-            print("\t%s" %path)
+            print(f"\t{path}")
 
     if ((do_check or do_rename)# or do_retag)
         and len(good_paths)):
         print("Successfully processed:")
         for path in good_paths:
-            print("\t%s" %path)
+            print(f"\t{path}")
 
     if len(skipped_paths):
         print("Skipped:")
         for path in skipped_paths:
-            print("\t%s" %path)
+            print(f"\t{path}")
