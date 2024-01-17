@@ -148,9 +148,9 @@ class ImageInfo_pillow:
     def get_tag(self, key):
         namespace, basename = key.split(':')
         if namespace == 'EXIF':
-            return get_exif_value(basename)
+            return self.get_exif_value(basename)
         elif namespace == 'GPS':
-            return get_gps_value(basename)
+            return self.get_gps_value(basename)
         else:
             raise NotImplementedError("Tag not supported: %s" %key)
 
@@ -491,7 +491,7 @@ def parse_filename(filename):
         break
     else:
         # unknown format
-        return None, title, None, ext
+        return None, None, None, ext
 
     structuredNameCheck = STRUCTURED_IMGNAME_CHECK.search(mainname)
     serialNameCheck = SERIAL_IMGNAME_CHECK.search(mainname)
@@ -515,7 +515,8 @@ def parse_filename(filename):
 
 def print_parse_filename(filename, *, disp_tz=None):
     prefix, nameinfo, modifier, ext = parse_filename(filename)
-    print("\tFilename:Format: %s" %nameinfo.formatDescription())
+    if nameinfo is not None:
+        print("\tFilename:Format: %s" %nameinfo.formatDescription())
     if isinstance(nameinfo, StructuredImageNameInfo):
         if modifier:
             print('\t\t(Detected "%s" suffix in new-style name)' %modifier)
