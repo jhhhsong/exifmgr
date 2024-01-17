@@ -118,7 +118,7 @@ class ImageInfo_pillow:
     # lifecycle
     # refer to https://pillow.readthedocs.io/en/stable/reference/open_files.html#image-lifecycle
     def __enter__(self):
-        self.img = self.PIL.Image.open(path)
+        self.img = self.PIL.Image.open(self.path)
         return self
 
     def __exit__(self, *_):
@@ -479,13 +479,11 @@ class StructuredImageNameInfo(
 # * unknown - None
 def parse_filename(filename):
     # remove suffix, remove everything up to IMG/DSC
-    #title, ext = os.path.splitext(basename); ext = ext[1:]
-    title = '.'.join(basename.split('.')[:-1])
-    ext = basename.split('.')[-1]
+    title, ext = os.path.splitext(filename); ext = ext[1:]
     mainname_prefix = None
     # TODO: also need to account for the fact that sometimes description is appended to the end
     for MAINNAME_PREFIX in ['DSC', 'IMG', 'dsc', 'dSC']:
-        start_idx = basename.find(MAINNAME_PREFIX)
+        start_idx = filename.find(MAINNAME_PREFIX)
         if start_idx == -1: continue
         mainname_prefix = MAINNAME_PREFIX
         prefix = title[:start_idx]
@@ -683,7 +681,7 @@ def interpret_localtime_interactive(
         else:
             return None
 
-def interactive_file_rename(suggested_name, outdirname, *, interactive):
+def interactive_file_rename(path, suggested_name, outdirname, *, interactive):
     import shutil
     first_prompt = True
     while True:
@@ -691,17 +689,15 @@ def interactive_file_rename(suggested_name, outdirname, *, interactive):
             accepted_name = input_prefill('\t-> Save to: ', suggested_name)
         else:
             accepted_name = suggested_name
-        first_prompt = False
-        dstpath = os.path.join(outdirname, accepted_name)
-
         # if path is cleared, assume user wants to skip the renaming
         if not accepted_name:
             break
+        first_prompt = False
 
-        if accepted_name == basename:
-            print("\t\tFile already has the desired name")
+        dstpath = os.path.join(outdirname, accepted_name)
+        if dstpath == path:
+            print("\t\tFile already has the desired name/location")
             break
-
         if (os.path.exists(dstpath)):
             print("\t\tError: destination already exists")
             if not interactive:
@@ -998,7 +994,7 @@ if __name__ == "__main__":
                 return
 
             outdirname = outdir or dirname
-            error = not interactive_file_rename(suggested_name, outdirname, interactive=interactive)
+            error = not interactive_file_rename(path, suggested_name, outdirname, interactive=interactive)
 
         #elif do_retag:
 
