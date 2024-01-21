@@ -33,6 +33,8 @@ import pytz
 
 print = functools.partial(print, flush=True)
 
+loader_verbose = True
+
 # Note: most of the time, should only use if interactive=True
 def input_prefill(prompt, prefill=''):
     import readline
@@ -107,7 +109,7 @@ class ImageInfo_pillow:
         PIL_EXIF_TAGNAME_MAP = { v: k for k, v in PIL.ExifTags.TAGS.items() }
         PIL_GPS_TAGNAME_MAP = { v: k for k, v in PIL.ExifTags.GPSTAGS.items() }
         _supported = True
-        print('[Installed: %s]' %_name)
+        if loader_verbose: print('[Installed: %s]' %_name)
     except ModuleNotFoundError:
         _supported = False
 
@@ -192,7 +194,7 @@ class ImageInfo_pyexiftool(ImageInfo_exiftool):
         # globally-shared instance
         _tool = exiftool.ExifTool()
         _supported = True
-        print('[Installed: %s]' %_name)
+        if loader_verbose: print('[Installed: %s]' %_name)
     except ModuleNotFoundError:
         _supported = False
 
@@ -228,7 +230,7 @@ class ImageInfo_pyexifinfo(ImageInfo_exiftool):
     try:
         import pyexifinfo
         _supported = True
-        print('[Installed: %s]' %_name)
+        if loader_verbose: print('[Installed: %s]' %_name)
     except ModuleNotFoundError:
         _supported = False
 
