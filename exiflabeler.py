@@ -426,7 +426,7 @@ class SerialImageNameInfo(
         )
     )
 ):
-    def formatDescription(self):
+    def formatDescription():
         return "raw"
 
     def from_parse(regex, possible_modifier_override=False):
@@ -461,7 +461,7 @@ class StructuredImageNameInfo(
         )
     )
 ):
-    def formatDescription(self):
+    def formatDescription():
         return _PROGRAM_NAME
 
     def from_parse(regex):
@@ -772,7 +772,7 @@ if __name__ == "__main__":
         '--rename', '-N',
         action='store_true',
         help='Rename file'
-        #action='store', nargs='?', const='std',
+        #action='store', nargs='?', const=StructuredImageNameInfo.formatDescription(),
         #metavar='FMT_NAME|FMT_PATTERN',
         #help='Rename file using the specified name pattern (by name or by pattern string)'
     )
